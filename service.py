@@ -19,8 +19,6 @@ oauth2schema = security.OAuth2PasswordBearer("/api/login")
 def create_db():
     return db.Base.metadata.create_all(bind=db.engine)
 
-create_db()
-
 
 def get_db():
     database = db.sessionLocal()
@@ -102,3 +100,24 @@ def current_user(db: orm.Session = fastapi.Depends(get_db), token: str = fastapi
     
     return sma.UserResponse.model_validate(db_user)
 
+
+def create_farm(post_request: sma.FarmDetailsPostRequest, user: sma.UserResponse, db: orm.Session):
+    post = models.FarmDetails(**post_request.model_dump(), user_id=user.id)
+    db.add(post)
+    db.commit()
+    db.refresh(post)
+    
+    return sma.FarmDetailsPostResponse.model_validate(post)
+
+
+def get_farms_by_user(user: sma.UserResponse, db: orm.Session):
+    post = db.query(models.FarmDetails).filter_by(user_id=user.id)
+    return list(map(sma.FarmDetailsPostResponse.model_validate, post))
+
+def get_farm_details(farm_id: int, db: orm.Session):
+    farm = db.query(models.FarmDetails).filter_by(id=farm_id).first()
+    
+    if farm is None:
+        raise HTTPException(status_code=401, detail="Farm cannot be found")
+    
+    return sma.FarmDetailsPostResponse.model_validate(farm)

@@ -1,5 +1,6 @@
 from fastapi import FastAPI, Depends, HTTPException, security
 
+from typing import List
 from sqlalchemy.orm import Session
 import service as sv
 import schemas as sma
@@ -46,3 +47,23 @@ def login_user(
 @app.get("/api/current_user", response_model=sma.UserResponse)
 def logged_in_user(user: sma.UserResponse = Depends(sv.current_user)):
     return user
+
+
+@app.post("/api/add_farm", response_model = sma.FarmDetailsPostResponse)
+def create_New_farm(
+    post_request: sma.FarmDetailsPostRequest, 
+    user: sma.UserRequest = Depends(sv.current_user), 
+    db: Session = Depends(sv.get_db)
+):
+    return sv.create_farm(user=user, db=db, post_request=post_request)
+
+
+@app.get("/api/all-farms/user", response_model=List[sma.FarmDetailsPostResponse])
+def get_all_user_farms(user: sma.UserRequest = Depends(sv.current_user), db: Session = Depends(sv.get_db)):
+    return sv.get_farms_by_user(user, db)
+
+
+@app.get("/api/farm/{farm_id}", response_model=sma.FarmDetailsPostResponse)
+def get_farm_details(farm_id: int, db : Session = Depends(sv.get_db)):
+    post = sv.get_farm_details(farm_id, db)
+    return post

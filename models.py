@@ -46,8 +46,10 @@ class FarmDetails(db.Base):
     __tablename__ = "Farms"
     id = Column(Integer, primary_key=True)
     user_id = Column(Integer, ForeignKey("User.id"))
+    farm_name = Column(Integer)
     location = Column(String)
-    rating = Column(Integer)
+    farm_image = Column(String)
+    rating = Column(Integer, default=0)
     verified = Column(Boolean, default=False)
     user = orm.relationship("UserModel", back_populates="farms", cascade="all, delete")
     created_at = Column(DateTime, default=func.now())
@@ -129,7 +131,7 @@ class ReviewModel(db.Base):
     __tablename__ = "Review"
     id = Column(Integer, primary_key=True)
     user_id = Column(Integer, ForeignKey("User.id"))
-    farm = Column(Integer, ForeignKey("Farms.id"))
+    farm_id = Column(Integer, ForeignKey("Farms.id"))
     review_content = Column(String, index=True)
     created_at = Column(DateTime, default=dt.datetime.now())
     user = orm.relationship("UserModel", back_populates="reviews")

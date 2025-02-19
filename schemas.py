@@ -23,15 +23,12 @@ class LoginRequest(pdt.BaseModel):
     password: str    
     
 class UserRequest(UserBase):
-    # password: str
     password: str = Field(..., title="Password", description="User's password.")
     
     class Config:
         from_attributes = True
 
 class UserResponse(UserBase):
-    # id: int
-    # created_at: datetime
     
     id: int = Field(..., title="User ID", description="Unique identifier for the user.")
     created_at: datetime = Field(..., title="Created At", description="Timestamp when the user was created.")
@@ -56,3 +53,25 @@ class PostResponse(PostBase):
     
     class Config:
         from_attributes = True
+        
+        
+
+class FarmDetailsPostBase(pdt.BaseModel):
+    model_config = pdt.ConfigDict(from_attributes=True)
+    
+    farm_name: str
+    farm_image: str
+    location: str
+    
+
+    
+class FarmDetailsPostRequest(FarmDetailsPostBase):
+    pass    
+
+class FarmDetailsPostResponse(FarmDetailsPostBase):
+    id: int
+    user_id: int
+    rating: int
+    verified: bool
+    created_at: datetime
+    
