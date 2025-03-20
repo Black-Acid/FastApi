@@ -38,7 +38,12 @@ class UserModel(db.Base):
         return hash.bcrypt.verify(password, self.password_hash)
     
     
-
+class UserBalance(db.Base):
+    __tablename__ = "Account"
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("User.id"))
+    balance = Column(Float, default=0.00)
+    last_update = Column(DateTime, default=func.now(), onupdate=func.now())
     
     
     
@@ -46,7 +51,7 @@ class FarmDetails(db.Base):
     __tablename__ = "Farms"
     id = Column(Integer, primary_key=True)
     user_id = Column(Integer, ForeignKey("User.id"))
-    farm_name = Column(Integer)
+    farm_name = Column(String)
     location = Column(String)
     farm_image = Column(String)
     rating = Column(Integer, default=0)
@@ -69,12 +74,14 @@ class FarmProducts(db.Base):
     __tablename__ = "Farm_Products"
     id = Column(Integer, primary_key=True)
     farm_id = Column(Integer, ForeignKey("Farms.id"))
-    category = Column(String)
+    productName = Column(String)
+    category = Column(String, nullable=False)
     description = Column(String)
+    initial_quantity = Column(Integer, default=0)
     quantity_available = Column(Integer, default=0)
     created_at = Column(DateTime, default=func.now())
     updated_at = Column(DateTime, default=func.now())
-    farmer = orm.relationship("FarmDetails", back_populates="products", cascade="all, delete")
+    farmer = orm.relationship("FarmDetails", back_populates="products", cascade="all, delete") # to be changed to a farm instead of farmer
     
     
 class OrderModel(db.Base):

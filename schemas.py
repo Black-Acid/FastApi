@@ -75,3 +75,14 @@ class FarmDetailsPostResponse(FarmDetailsPostBase):
     verified: bool
     created_at: datetime
     
+    
+class AddNewProduct(pdt.BaseModel):
+    model_config = pdt.ConfigDict(from_attributes=True)
+    # Field(..., title="Email", description="The user's email address.")
+    farm_id: str
+    productName: str
+    category: str = Field(..., title="Product Category", description="The category to which the product belongs")
+    description: str
+    quantity_available: str
+    
+    

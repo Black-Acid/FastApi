@@ -1,4 +1,5 @@
 from fastapi import FastAPI, Depends, HTTPException, security
+from fastapi.responses import JSONResponse
 
 from typing import List
 from sqlalchemy.orm import Session
@@ -59,7 +60,7 @@ def create_New_farm(
 
 
 @app.get("/api/all-farms/user", response_model=List[sma.FarmDetailsPostResponse])
-def get_all_user_farms(user: sma.UserRequest = Depends(sv.current_user), db: Session = Depends(sv.get_db)):
+def get_all_user_farms(user: sma.UserResponse = Depends(sv.current_user), db: Session = Depends(sv.get_db)):
     return sv.get_farms_by_user(user, db)
 
 
@@ -67,3 +68,19 @@ def get_all_user_farms(user: sma.UserRequest = Depends(sv.current_user), db: Ses
 def get_farm_details(farm_id: int, db : Session = Depends(sv.get_db)):
     post = sv.get_farm_details(farm_id, db)
     return post
+
+
+# add a new product endpoint 
+
+@app.post("/api/add_products")
+async def add_new_products(data: sma.AddNewProduct, db: Session = Depends(sv.get_db), ):
+    try:
+        return await sv.add_new_product(data, db)
+    except:
+        raise HTTPException(status_code=400, detail="Unable to save the data")
+    
+    
+@app.get("/api/farmer_dashboard")
+async def farmer_dashboard(user: sma.UserResponse = Depends(sv.current_user), db: Session = Depends(sv.get_db)):
+    return await sv.dashboardStuffs(user.id, db)
+    
