@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 import service as sv
 import schemas as sma
 from starlette.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 app = FastAPI()
 
@@ -19,6 +20,8 @@ app.add_middleware(
     allow_methods=["*"],  # Allow all HTTP methods
     allow_headers=["*"],  # Allow all headers
 )
+
+app.mount("/images", StaticFiles(directory="uploads"), name="images")
 
 
 @app.post("/api/register")
@@ -92,4 +95,32 @@ async def add_new_products(
 @app.get("/api/farmer_dashboard")
 async def farmer_dashboard(user: sma.UserResponse = Depends(sv.current_user), db: Session = Depends(sv.get_db)):
     return await sv.dashboardStuffs(user.id, db)
+
+
+@app.get("/api/farmer/ordersPage")
+async def farmersOrderPage(user: sma.UserResponse = Depends(sv.current_user), db: Session = Depends(sv.get_db)):
+    return await sv.ordersPage(user.id, db)
+
+
+@app.get("/api/consumer")
+async def consummerPage(user: sma.UserResponse = Depends(sv.current_user), db: Session = Depends(sv.get_db)):
+    page_content = await sv.consumerPage(user.id, db)
+    
+    
+    for item in page_content:
+        item.productImage = f"http://192.168.9.230:8000/{item.productImage}"
+        
+    
+    return page_content
+
+
+
+@app.post("/api/consumer/placeorder")
+async def placeOrder(
+    data: sma.PlaceOrderPost,
+    user: sma.UserResponse = Depends(sv.current_user), 
+    db: Session = Depends(sv.get_db),
+):
+    value = await sv.placeOrder(data, db, user.id)
+    return value
     

@@ -4,6 +4,7 @@ import fastapi.security as security
 import sqlalchemy.orm as orm
 import passlib.hash as hash
 import models
+from models import * 
 import schemas as sma
 import email_validator as emv
 import jwt
@@ -11,7 +12,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from starlette.middleware.cors import CORSMiddleware
 from fastapi import HTTPException
 from sqlalchemy import func, desc, extract
-from datetime import timedelta, datetime
+from datetime import timedelta, datetime, timezone
 import shutil
 import os
 
@@ -24,6 +25,11 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 JWT_SECRET = "hlsakjdlsjdhlksjdlkashdlsadhkds"
 oauth2schema = security.OAuth2PasswordBearer("/api/login")
+
+
+
+def get_total_orders():
+    pass
 
 
 def create_db():
@@ -41,7 +47,7 @@ def get_db():
 
 
 def getUserByEmail(email: str, db: orm.Session):
-    return db.query(models.UserModel).filter(models.UserModel.email == email).first()
+    return db.query(UserModel).filter(UserModel.email == email).first()
 
  
 def create_user(user: sma.UserRequest, db= orm.Session):
@@ -55,7 +61,7 @@ def create_user(user: sma.UserRequest, db= orm.Session):
     hashed_password = hash.bcrypt.hash(user.password)
     
     try:
-        user_Object = models.UserModel(
+        user_Object = UserModel(
             email=email,
             username=user.username,
             password_hash=hashed_password,
@@ -65,14 +71,24 @@ def create_user(user: sma.UserRequest, db= orm.Session):
         db.add(user_Object)
         db.commit()
         db.refresh(user_Object)
+        
+        
+        if user_Object.role == "FARMER":
+            user_balance = models.UserBalance(
+                user_id=user_Object.id,
+                balance=0.00
+            )
+            db.add(user_balance)
+            db.commit()
+            db.refresh(user_balance)
     except SQLAlchemyError as e:
         db.rollback()
-        raise HTTPException(status_code=500, detail="Failed to register user due to internal error")
+        raise HTTPException(status_code=500, detail=f"Failed to register user {str(e)}")
     
     return user_Object
 
 
-def create_token(user: models.UserModel, db: orm.Session):
+def create_token(user: UserModel, db: orm.Session):
     user_schema = sma.UserResponse.model_validate(user)
     # the line below to to find the user's role if it was not added but I think I ca improve it
     db_user = db.query(models.UserModel).filter(models.UserModel.email == user_schema.email).first()
@@ -90,8 +106,8 @@ def create_token(user: models.UserModel, db: orm.Session):
 
 
 def login(identifier: str, password: str, db: orm.Session):
-    user = db.query(models.UserModel).filter(
-        (models.UserModel.email == identifier) | (models.UserModel.username == identifier)
+    user = db.query(UserModel).filter(
+        (UserModel.email == identifier) | (UserModel.username == identifier)
     ).first()
     
     if not user:
@@ -107,7 +123,7 @@ def login(identifier: str, password: str, db: orm.Session):
 def current_user(db: orm.Session = fastapi.Depends(get_db), token: str = fastapi.Depends(oauth2schema)):
     try:
         payload = jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
-        db_user = db.query(models.UserModel).get(payload["id"]) #get User by id which will be decoded from payload along with other details
+        db_user = db.query(UserModel).get(payload["id"]) #get User by id which will be decoded from payload along with other details
     except:
         raise fastapi.HTTPException(status_code=401, detail="Invalid creddentials")
     
@@ -132,7 +148,7 @@ def create_farm(post_request: sma.FarmDetailsPostRequest, user: sma.UserResponse
 
 
 def get_farms_by_user(user: sma.UserResponse, db: orm.Session):
-    post = db.query(models.FarmDetails).filter_by(user_id=user.id)
+    post = db.query(FarmDetails).filter_by(user_id=user.id)
     return list(map(sma.FarmDetailsPostResponse.model_validate, post))
 
 
@@ -152,7 +168,7 @@ async def add_new_product(
     farm_image: fastapi.UploadFile = fastapi.File(...), 
     data: sma.AddNewProduct = fastapi.Depends(sma.AddNewProduct.as_form)
 ):
-    user = db.query(models.UserModel).filter(models.UserModel.id == user_id).first()
+    user = db.query(UserModel).filter(UserModel.id == user_id).first()
     
     if user.role != "FARMER":
         raise HTTPException(status_code=401, detail="You are not a Producer/Farmer")
@@ -163,7 +179,7 @@ async def add_new_product(
         shutil.copyfileobj(farm_image.file, buffer)
     
     
-    new_product = models.FarmProducts(**data.model_dump(), productImage=file_location)
+    new_product = FarmProducts(**data.model_dump(), productImage=file_location)
     db.add(new_product)
     db.commit()
     db.refresh(new_product)
@@ -179,27 +195,31 @@ async def add_new_product(
     }
     
 async def dashboardStuffs(user_id: int, db: orm.Session):
-    user = db.query(models.UserBalance).filter_by(user_id=user_id)
+    user = db.query(UserBalance).filter_by(user_id=user_id)
     # Total balance in user's Account
-    user_balance = user.order_by(models.UserBalance.last_update.desc()).first()
+    user_balance = user.order_by(UserBalance.last_update.desc()).first()
     
     # Total orders placed to that particular farmer
     total_orders = (
-        db.query(func.count(models.FarmProducts.id))
-        .join(models.FarmDetails, models.FarmDetails.id == models.FarmProducts.farm_id)
-        .filter(models.FarmDetails.user_id == user_id)
+        db.query(func.count(FarmProducts.id))
+        .join(FarmDetails, FarmDetails.id == FarmProducts.farm_id)
+        .filter(FarmDetails.user_id == user_id)
         .scalar()
     )
+    
+    
+    
+    
     
     
     # top selling Products
     top_selling = (
         db.query(
-            models.FarmProducts.productName,
-            (models.FarmProducts.initial_quantity - models.FarmProducts.quantity_available).label("total_sold")
+            FarmProducts.productName,
+            (FarmProducts.initial_quantity - FarmProducts.quantity_available).label("total_sold")
         )
-        .join(models.FarmDetails, models.FarmDetails.id == models.FarmProducts.farm_id)
-        .filter(models.FarmDetails.user_id == user_id)
+        .join(FarmDetails, FarmDetails.id == FarmProducts.farm_id)
+        .filter(FarmDetails.user_id == user_id)
         .order_by(desc("total_sold"))
         .limit(4)
         .all()
@@ -210,12 +230,12 @@ async def dashboardStuffs(user_id: int, db: orm.Session):
     
     sales_by_category = (
         db.query(
-            models.FarmProducts.category,
-            func.sum(models.FarmProducts.initial_quantity - models.FarmProducts.quantity_available).label("total_sold")
+            FarmProducts.category,
+            func.sum(FarmProducts.initial_quantity - FarmProducts.quantity_available).label("total_sold")
         )
-        .join(models.FarmDetails, models.FarmDetails.id == models.FarmProducts.farm_id)
-        .filter(models.FarmDetails.user_id == user_id)
-        .group_by(models.FarmProducts.category)
+        .join(FarmDetails, FarmDetails.id == FarmProducts.farm_id)
+        .filter(FarmDetails.user_id == user_id)
+        .group_by(FarmProducts.category)
         .all()
     )
     
@@ -226,13 +246,13 @@ async def dashboardStuffs(user_id: int, db: orm.Session):
     # Unprocessed Orders and Processed orders
     order_counts = (
         db.query(
-            models.OrderItemsModel.order_status,
-            func.count(models.OrderItemsModel.id).label("OrderStatus_Count")
+            OrderItemsModel.order_status,
+            func.count(OrderItemsModel.id).label("OrderStatus_Count")
         )
-        .join(models.FarmProducts, models.OrderItemsModel.product_id == models.FarmProducts.id)
-        .join(models.FarmDetails, models.FarmProducts.farm_id == models.FarmDetails.id)
-        .filter(models.FarmDetails.user_id == user_id)
-        .group_by(models.OrderItemsModel.order_status)
+        .join(FarmProducts, OrderItemsModel.product_id == FarmProducts.id)
+        .join(FarmDetails, FarmProducts.farm_id == FarmDetails.id)
+        .filter(FarmDetails.user_id == user_id)
+        .group_by(OrderItemsModel.order_status)
         .all()
     )
     
@@ -241,14 +261,14 @@ async def dashboardStuffs(user_id: int, db: orm.Session):
     
     
     # New Customers who bought from the week
-    week_ago = datetime.now(datetime.UTC) - timedelta(days=7)
+    week_ago = datetime.now(timezone.utc) - timedelta(days=7)
     
     total_customers = (
-        db.query(func.count(func.distinct(models.OrderItemsModel.user_id)))
-        .join(models.FarmProducts, models.OrderItemsModel.product_id == models.FarmProducts.id)  
-        .join(models.FarmDetails, models.FarmProducts.farm_id == models.FarmDetails.id)  
-        .filter(models.FarmDetails.user_id == user_id)  
-        .filter(models.OrderItemsModel.created_at >= week_ago)  # Filter for past week
+        db.query(func.count(func.distinct(OrderItemsModel.consumer)))
+        .join(FarmProducts, OrderItemsModel.product_id == FarmProducts.id)  
+        .join(FarmDetails, FarmProducts.farm_id == FarmDetails.id)  
+        .filter(FarmDetails.user_id == user_id)  
+        .filter(OrderItemsModel.created_at >= week_ago)  # Filter for past week
         .scalar()
     )
     
@@ -256,11 +276,11 @@ async def dashboardStuffs(user_id: int, db: orm.Session):
     
     monthly_profit = (
             db.query(
-            extract('month', models.OrderItemsModel.created_at).label('month'),
-            func.sum(models.OrderItemsModel.price_of_purchased_quantity).label('profit')
+            extract('month', OrderItemsModel.created_at).label('month'),
+            func.sum(OrderItemsModel.price_of_purchased_quantity).label('profit')
         )
-        .join(models.FarmProducts, models.OrderItemsModel.product_id == models.FarmProducts.id)
-        .join(models.FarmDetails, models.FarmProducts.farm_id == models.FarmDetails.id)
+        .join(FarmProducts, OrderItemsModel.product_id == FarmProducts.id)
+        .join(FarmDetails, FarmProducts.farm_id == FarmDetails.id)
         .filter(models.FarmDetails.user_id == user_id)  # Filter by farmer's user_id
         .group_by('month')
         .order_by('month')
@@ -268,7 +288,7 @@ async def dashboardStuffs(user_id: int, db: orm.Session):
     )
 
     # Convert to a dictionary for a chart
-    profit_chart_data = {f"{year}-{month:02d}": profit for year, month, profit in monthly_profit}
+    profit_chart_data = {f"{month:02d}": profit for month, profit in monthly_profit}
 
     #average rating
     # He will make it a dummy data
@@ -276,7 +296,7 @@ async def dashboardStuffs(user_id: int, db: orm.Session):
 
     
     return {
-        "Balance": user_balance,
+        "Balance": user_balance.balance if user_balance.balance else 0,
         "total_Orders": total_orders,
         "top_selling_products": final_top_selling,
         "sales_by_category": sales_by_cat,
@@ -361,4 +381,64 @@ async def reviewMessages(user_id: int, db: orm.Session):
     
     
 async def StatisticsPage(user_id: int, db: orm.Session):
+    pass
+
+
+async def newReviews(farm_id: int, user_id: int, rating: int, content: str):
+    pass
+
+
+
+
+async def consumerPage(user_id: int, db: orm.Session):
+    logged_in_user = db.query(UserModel).filter(UserModel.id == user_id).first()
+    
+    if logged_in_user.role != "CONSUMER":
+        raise HTTPException(status_code=401, detail="Sorry please log in as a Consumer to access available Products")
+    
+    _products = (
+        db.query(FarmProducts)
+        .order_by((FarmProducts.initial_quantity - FarmProducts.quantity_available).desc())
+        .all()
+    )
+    
+    return [product for product in _products]
+
+
+
+async def placeOrder(data: sma.PlaceOrderPost, db: orm.Session, user_id: int):
+    order = OrderModel(
+        consumer_id=user_id,
+        order_status=data.order_status,
+        shipping_address=data.address,
+    )
+    db.add(order)
+    db.commit()
+    db.refresh(order)
+    
+    items = data.cart_items
+    
+    new_orders = OrderItemsModel(
+        order_id=order.id,
+        consumer=user_id,
+        product_id=items.product_id,
+        order_status=items.order_status,
+        quantity_purchased=items.quantity_purchased,
+        price_of_purchased_quantity=items.quantity_purchased_price
+        
+    )
+    db.add(new_orders)
+    db.commit()
+    db.refresh(new_orders)
+    
+    return {"order": order, "order_item": new_orders}
+    
+    
+    # parameters -> farmId, ProductID, ConsumerID, Quantity, address, order_status, total price
+    # Orders Come in then we will create a new order for the ordersModel Instance
+    # the we will through the items in the order then we will and save it in the database
+    
+    # So the list will contain something like ProductId
+    
+    # return back to this side
     pass

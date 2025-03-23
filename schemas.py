@@ -105,5 +105,29 @@ class AddNewProduct(pdt.BaseModel):
             description=description,
             quantity_available=quantity_available
         )
+        
+        
+        
+class CartItem(pdt.BaseModel):
+    product_id: int
+    order_status: str   
+    quantity_purchased_price: float 
+    quantity_purchased: float    
+
+
+
+
+class PlaceOrderPost(pdt.BaseModel):
+    model_config = pdt.ConfigDict(from_attributes=True)
+    # parameters -> farmId, ProductName, Consumer, Quantity, address, order_status, total price
+    
+    # for every order we will need order_status, address cart 
+    # in the cart farm_id, product_id, order_status, quantity purchased, price_of_quantity_purchased
+    
+    cart_items: CartItem
+    address: str
+    order_status: str
+    
+
     
     
