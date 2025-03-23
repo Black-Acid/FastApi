@@ -3,6 +3,7 @@ from pydantic import Field
 from datetime import datetime
 from typing import Optional
 from enum import Enum
+from fastapi import Form
 
 
 class RoleEnum(str, Enum):
@@ -60,7 +61,6 @@ class FarmDetailsPostBase(pdt.BaseModel):
     model_config = pdt.ConfigDict(from_attributes=True)
     
     farm_name: str
-    farm_image: str
     location: str
     
 
@@ -79,10 +79,31 @@ class FarmDetailsPostResponse(FarmDetailsPostBase):
 class AddNewProduct(pdt.BaseModel):
     model_config = pdt.ConfigDict(from_attributes=True)
     # Field(..., title="Email", description="The user's email address.")
-    farm_id: str
+    farm_id: int
     productName: str
     category: str = Field(..., title="Product Category", description="The category to which the product belongs")
     description: str
-    quantity_available: str
+    quantity_available: int
+    price: float
+    
+    
+    @classmethod
+    def as_form(
+        cls, 
+        productName: str = Form(...), 
+        price: float = Form(...), 
+        category: str = Form(...), 
+        description: str = Form(...),
+        quantity_available: int = Form(...),
+        farm_id: int = Form(...),
+    ):
+        return cls(
+            productName=productName, 
+            farm_id=farm_id,
+            price=price, 
+            category=category, 
+            description=description,
+            quantity_available=quantity_available
+        )
     
     

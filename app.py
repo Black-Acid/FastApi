@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Depends, HTTPException, security
+from fastapi import FastAPI, Depends, HTTPException, security, UploadFile, File
 from fastapi.responses import JSONResponse
 
 from typing import List
@@ -65,7 +65,11 @@ def get_all_user_farms(user: sma.UserResponse = Depends(sv.current_user), db: Se
 
 
 @app.get("/api/farm/{farm_id}", response_model=sma.FarmDetailsPostResponse)
-def get_farm_details(farm_id: int, db : Session = Depends(sv.get_db)):
+def get_farm_details(
+    farm_id: int, 
+    db : Session = Depends(sv.get_db),
+    user: sma.UserResponse = Depends(sv.current_user)
+):
     post = sv.get_farm_details(farm_id, db)
     return post
 
@@ -73,9 +77,14 @@ def get_farm_details(farm_id: int, db : Session = Depends(sv.get_db)):
 # add a new product endpoint 
 
 @app.post("/api/add_products")
-async def add_new_products(data: sma.AddNewProduct, db: Session = Depends(sv.get_db), ):
+async def add_new_products(
+    user: sma.UserResponse = Depends(sv.current_user),
+    db: Session = Depends(sv.get_db), 
+    imageFile: UploadFile = File(...),
+    data: sma.AddNewProduct = Depends(sma.AddNewProduct.as_form)
+):
     try:
-        return await sv.add_new_product(data, db)
+        return await sv.add_new_product(user.id, db, imageFile, data)
     except:
         raise HTTPException(status_code=400, detail="Unable to save the data")
     

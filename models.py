@@ -28,6 +28,7 @@ class UserModel(db.Base):
     created_at = Column(DateTime, default=dt.datetime.now())
     updated_at = Column(DateTime, default=func.now())
     reviews = orm.relationship("ReviewModel", back_populates="user", cascade="all, delete")
+    orderItems = orm.relationship("OrderItemsModel", back_populates="user", cascade="all, delete")
     farms = orm.relationship("FarmDetails", back_populates="user", cascade="all, delete")
     orders = orm.relationship("OrderModel", back_populates="consumer", cascade="all, delete")
     transactions = orm.relationship("TransactionModel", back_populates="user", cascade="all, delete")
@@ -53,7 +54,7 @@ class FarmDetails(db.Base):
     user_id = Column(Integer, ForeignKey("User.id"))
     farm_name = Column(String)
     location = Column(String)
-    farm_image = Column(String)
+    farm_image = Column(String) #You are not really needed
     rating = Column(Integer, default=0)
     verified = Column(Boolean, default=False)
     user = orm.relationship("UserModel", back_populates="farms", cascade="all, delete")
@@ -76,6 +77,8 @@ class FarmProducts(db.Base):
     farm_id = Column(Integer, ForeignKey("Farms.id"))
     productName = Column(String)
     category = Column(String, nullable=False)
+    price = Column(Float, default=0.00)
+    productImage = Column(String)
     description = Column(String)
     initial_quantity = Column(Integer, default=0)
     quantity_available = Column(Integer, default=0)
@@ -113,12 +116,15 @@ class OrderItemsModel(db.Base):
     __tablename__ = "Items_Ordered"
     id = Column(Integer, primary_key=True)
     order_id = Column(Integer, ForeignKey("Orders_Made.id"))
+    consumer = Column(Integer, ForeignKey("User.id"))
     product_id = Column(Integer, ForeignKey("Farm_Products.id"))
     quantity_purchased = Column(Integer)
+    order_status = Column(String)
     price_of_purchased_quantity = Column(Float)
     created_at = Column(DateTime, default=func.now())
     updated_at = Column(DateTime, default=func.now())
     order = orm.relationship("OrderModel", back_populates="order_items", cascade="all, delete")
+    user = orm.relationship("UserModel", back_populates="orderItems")
     
     
 class TransactionModel(db.Base):
@@ -140,6 +146,7 @@ class ReviewModel(db.Base):
     user_id = Column(Integer, ForeignKey("User.id"))
     farm_id = Column(Integer, ForeignKey("Farms.id"))
     review_content = Column(String, index=True)
+    review_rate = Column(Integer)
     created_at = Column(DateTime, default=dt.datetime.now())
     user = orm.relationship("UserModel", back_populates="reviews")
     farm = orm.relationship("FarmDetails", back_populates="reviews", cascade="all, delete")
