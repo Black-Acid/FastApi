@@ -1,9 +1,11 @@
 import sqlalchemy as sql
 import sqlalchemy.ext.declarative as declarative
 import sqlalchemy.orm as orm
+import os
 
 
-DB_URL = "sqlite:///./sqlite3.db"
+DB_URL = os.getenv("DATABASE_URL")
+# DB_URL = "sqlite:///./sqlite3.db"
 
 engine = sql.create_engine(
     DB_URL, 
