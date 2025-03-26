@@ -11,10 +11,11 @@ import jwt
 from sqlalchemy.exc import SQLAlchemyError
 from starlette.middleware.cors import CORSMiddleware
 from fastapi import HTTPException
-from sqlalchemy import func, desc, extract
+from sqlalchemy import func, desc, extract, and_
 from datetime import timedelta, datetime, timezone
 import shutil
 import os
+import calendar 
 
 
 UPLOAD_DIR = "uploads"  # Directory to store images
@@ -197,52 +198,131 @@ async def add_new_product(
 async def dashboardStuffs(user_id: int, db: orm.Session):
     user = db.query(UserBalance).filter_by(user_id=user_id)
     # Total balance in user's Account
-    user_balance = user.order_by(UserBalance.last_update.desc()).first()
+    
     
     # Total orders placed to that particular farmer
     total_orders = (
-        db.query(func.count(FarmProducts.id))
+        db.query(func.count(OrderItemsModel.id))  # Count total order items
+        .join(FarmProducts, FarmProducts.id == OrderItemsModel.product_id)
         .join(FarmDetails, FarmDetails.id == FarmProducts.farm_id)
-        .filter(FarmDetails.user_id == user_id)
+        .filter(FarmDetails.user_id == user_id)  # Filter for the user's farm products
+        .scalar()  # Get the single count result
+    )
+    
+
+    
+    completed_sales = (
+        db.query(
+            OrderItemsModel
+        )
+        .join(FarmProducts, OrderItemsModel.product_id == FarmProducts.id)
+        .join(FarmDetails, FarmProducts.farm_id == FarmDetails.id)
+        .filter(
+            and_(
+                FarmDetails.user_id == user_id,
+                OrderItemsModel.order_status == "delivered",
+                OrderItemsModel.paid == False
+            )
+        )
+        .all()
+    )
+    
+    new_Orders = (
+        db.query(
+            OrderItemsModel
+        )
+        .join(FarmProducts, OrderItemsModel.product_id == FarmProducts.id)
+        .join(FarmDetails, FarmProducts.farm_id == FarmDetails.id)
+        .filter(
+            and_(
+                FarmDetails.user_id == user_id,
+                OrderItemsModel.order_status == "pending",
+                OrderItemsModel.paid == False
+            )
+        )
+        .all()
+    )
+    
+    pending = len(new_Orders)
+    
+    total_payments = (
+        db.query(func.count(OrderItemsModel.id))
+        .join(FarmProducts, OrderItemsModel.product_id == FarmProducts.id)
+        .join(FarmDetails, FarmProducts.farm_id == FarmDetails.id)
+        .filter(
+            FarmDetails.user_id == user_id,
+            OrderItemsModel.paid == True  # Only count paid orders
+        )
         .scalar()
     )
     
+    total_paid = total_payments
     
-    
+    if completed_sales:
+        total_earnings = sum(order.price_of_purchased_quantity for order in completed_sales)
+
+        farmer_account = db.query(UserBalance).filter(UserBalance.user_id == user_id).first()
+
+        if farmer_account:
+            print(f"Updating balance: {farmer_account.balance} + {total_earnings}")
+            farmer_account.balance += total_earnings
+
+            # Mark all processed orders as paid
+            for order in completed_sales:
+                order.paid = True  # Prevent double payme
+                
+
+            db.commit()
+            print(f"New Balance: {farmer_account.balance}")
+        else:
+            print("Farmer account not found!")
+    else:
+        print("No new completed sales found.")
     
     
     
     # top selling Products
+    
+
     top_selling = (
         db.query(
             FarmProducts.productName,
-            (FarmProducts.initial_quantity - FarmProducts.quantity_available).label("total_sold")
+            func.sum(OrderItemsModel.quantity_purchased).label("total_sold")  # Directly count sales
         )
         .join(FarmDetails, FarmDetails.id == FarmProducts.farm_id)
-        .filter(FarmDetails.user_id == user_id)
+        .join(OrderItemsModel, OrderItemsModel.product_id == FarmProducts.id)
+        .filter(
+            FarmDetails.user_id == user_id,
+            OrderItemsModel.order_status == "delivered"
+        )
+        .group_by(FarmProducts.productName)
         .order_by(desc("total_sold"))
         .limit(4)
         .all()
     )
-    
+
     final_top_selling = {product.productName: product.total_sold for product in top_selling}
-    
-    
+
+
     sales_by_category = (
         db.query(
             FarmProducts.category,
-            func.sum(FarmProducts.initial_quantity - FarmProducts.quantity_available).label("total_sold")
+            func.sum(OrderItemsModel.quantity_purchased).label("total_sold")  # Count sales from orders
         )
         .join(FarmDetails, FarmDetails.id == FarmProducts.farm_id)
-        .filter(FarmDetails.user_id == user_id)
+        .join(OrderItemsModel, OrderItemsModel.product_id == FarmProducts.id)
+        .filter(
+            FarmDetails.user_id == user_id,
+            OrderItemsModel.order_status == "delivered"
+        )
         .group_by(FarmProducts.category)
         .all()
     )
-    
+
     total_sales = sum(sold for _, sold in sales_by_category)
-    
+
     sales_by_cat = {category: (sold / total_sales) * 100 for category, sold in sales_by_category} if total_sales else {}
-    
+
     # Unprocessed Orders and Processed orders
     order_counts = (
         db.query(
@@ -293,16 +373,54 @@ async def dashboardStuffs(user_id: int, db: orm.Session):
     #average rating
     # He will make it a dummy data
     
-
+    user_balance = user.order_by(UserBalance.last_update.desc()).first()
+    
+    orders = (
+        db.query(
+            models.UserModel.username,  # Name of the customer
+            models.FarmProducts.productName,  # Product they are purchasing
+            models.OrderItemsModel.order_status,  # Status of their order
+            models.OrderItemsModel.quantity_purchased,  # Quantity purchased
+            models.OrderModel.created_at,  # Date of order placement
+            models.OrderItemsModel.price_of_purchased_quantity,  # Total price of the items
+        )
+        .join(models.OrderModel, models.OrderModel.id == models.OrderItemsModel.order_id)  
+        .join(models.UserModel, models.OrderModel.consumer_id == models.UserModel.id)  # Join with users to get their names
+        .join(models.FarmProducts, models.OrderItemsModel.product_id == models.FarmProducts.id)  # Join products
+        .join(models.FarmDetails, models.FarmProducts.farm_id == models.FarmDetails.id)  # Link products to farms
+        .filter(models.FarmDetails.user_id == user_id)  # Only fetch orders for this farmer
+        .all()
+    )
+    
+    
+    
+    order_details = [
+        {
+            "customer_name": order.username,
+            "product_name": order.productName,
+            "order_status": order.order_status,
+            "quantity": order.quantity_purchased,
+            "order_date": order.created_at.strftime("%Y-%m-%d"),  # Formatting date
+            "total_price": order.price_of_purchased_quantity
+        }
+        for order in orders
+    ]
+    
+    
+    
+    
     
     return {
-        "Balance": user_balance.balance if user_balance.balance else 0,
+        "Balance": user_balance.balance,
         "total_Orders": total_orders,
         "top_selling_products": final_top_selling,
         "sales_by_category": sales_by_cat,
         "Order_types": order_types,
         "Profit_chart": profit_chart_data,
-        "Customers_for_week": total_customers
+        "Customers_for_week": total_customers,
+        "succesfulOrders": total_paid,
+        "NewOrders": pending,
+        "order_details": order_details
     }
     
     
@@ -381,8 +499,81 @@ async def reviewMessages(user_id: int, db: orm.Session):
     
     
 async def StatisticsPage(user_id: int, db: orm.Session):
-    pass
-
+    orders_for_farmer = (
+        db.query(
+            extract("month", OrderItemsModel.created_at).label("month"),  # Extract the month
+            func.count(OrderItemsModel.id).label("order_count")
+        )
+        .join(FarmProducts, OrderItemsModel.product_id == FarmProducts.id)
+        .join(FarmDetails, FarmProducts.farm_id == FarmDetails.id)
+        .filter(FarmDetails.user_id == user_id)
+        .group_by("month")
+        .all()
+    )
+    
+    
+    
+    chart_data = {calendar.month_abbr[month]: count for month, count in orders_for_farmer}
+    
+    # Duplicated code Convert into a function and call them 
+    order_counts = (
+        db.query(
+            OrderItemsModel.order_status,
+            func.count(OrderItemsModel.id).label("OrderStatus_Count")
+        )
+        .join(FarmProducts, OrderItemsModel.product_id == FarmProducts.id)
+        .join(FarmDetails, FarmProducts.farm_id == FarmDetails.id)
+        .filter(FarmDetails.user_id == user_id)
+        .group_by(OrderItemsModel.order_status)
+        .all()
+    )
+    
+    order_types = {status: count for status, count in order_counts}
+    
+    # another Duplicated a little bit
+    sales_by_category = (
+        db.query(
+            FarmProducts.category,
+            func.sum(FarmProducts.initial_quantity - FarmProducts.quantity_available).label("total_sold")
+        )
+        .group_by(FarmProducts.category)
+        .all()
+    )
+    
+    total_sales = sum(sold for _, sold in sales_by_category)
+    
+    sales_by_cat = {category: (sold / total_sales) * 100 for category, sold in sales_by_category} if total_sales else {}
+    
+    user = db.query(UserBalance).filter_by(user_id=user_id)
+    
+    _balance = user.order_by(UserBalance.last_update.desc()).first()
+    
+    
+    unrealized_profit = (
+        db.query(func.sum(OrderItemsModel.price_of_purchased_quantity))
+        .join(FarmProducts, OrderItemsModel.product_id == FarmProducts.id)
+        .join(FarmDetails, FarmProducts.farm_id == FarmDetails.id)
+        .filter(FarmDetails.user_id == user_id)
+        .filter(OrderItemsModel.order_status == "pending")
+    ).scalar()
+    
+    
+    
+    
+    
+    
+    data = {
+        "chart_data": chart_data,
+        "order_types": order_types,
+        "salesCategory": sales_by_cat,
+        "user_balance": _balance.balance,
+        "unrealized": unrealized_profit
+    }
+    
+    db.close()
+    return data
+    
+    
 
 async def newReviews(farm_id: int, user_id: int, rating: int, content: str):
     pass
@@ -431,7 +622,15 @@ async def placeOrder(data: sma.PlaceOrderPost, db: orm.Session, user_id: int):
     db.commit()
     db.refresh(new_orders)
     
+    
+    # Now add the account Balance over here there is a way we will add the balance
+    # We will fetch all the orders with balance as completed
+    # Loop through to add the balance of each to order and add the balance to the farmer's money
+    
     return {"order": order, "order_item": new_orders}
+
+
+
     
     
     # parameters -> farmId, ProductID, ConsumerID, Quantity, address, order_status, total price

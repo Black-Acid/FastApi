@@ -121,6 +121,7 @@ class OrderItemsModel(db.Base):
     order_status = Column(String)
     quantity_purchased = Column(Integer)
     price_of_purchased_quantity = Column(Float)
+    paid = Column(Boolean, default=False)
     created_at = Column(DateTime, default=func.now())
     updated_at = Column(DateTime, default=func.now())
     order = orm.relationship("OrderModel", back_populates="order_items", cascade="all, delete")

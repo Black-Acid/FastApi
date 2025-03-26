@@ -123,4 +123,9 @@ async def placeOrder(
 ):
     value = await sv.placeOrder(data, db, user.id)
     return value
+
+
+@app.get("/api/farmer/statistics")
+async def statistics(user: sma.UserResponse = Depends(sv.current_user), db: Session = Depends(sv.get_db)):
+    return await sv.StatisticsPage(user.id, db)
     
