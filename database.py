@@ -9,7 +9,6 @@ DB_URL = os.getenv("DATABASE_URL")
 
 engine = sql.create_engine(
     DB_URL, 
-    connect_args={"check_same_thread": False},
     pool_size=10,        # ✅ Increase the number of concurrent connections
     max_overflow=20,     # ✅ Allow temporary extra connections
     pool_timeout=30,     # ✅ Wait time before failing
